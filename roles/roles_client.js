@@ -26,17 +26,31 @@ Roles._handlebarsHelpers = {
    *
    * @method isInRole
    * @param {String} role name of role or comma-seperated list of roles
+   * @param {String} scope identifier of role scope to check
    * @return {Boolean} true if current user is in at least one of the target roles
    */
-  isInRole: function (role) {
+  isInRole: function (role, scope) {
     var user = Meteor.user(),
-      comma = role && role.indexOf(','),
-      roles
+      scopes, roles
 
     if (!user) return false
 
+	roles = commaSplit(role);
+	scopes = commaSplit(scope);
+
+    return Roles.userIsInRole(user, roles, scopes)
+  }
+}
+
+// comma splitter
+var commaSplit = function(str) {
+	if(typeof str !== "string")	return;
+	
+	var comma = str && str.indexOf(','),
+		splitStr
+		
     if (comma !== -1) {
-      roles = _.reduce(role.split(','), function (memo, r) {
+      splitStr = _.reduce(str.split(','), function (memo, r) {
         if (!r || !r.trim()) {
           return memo
         }
@@ -44,13 +58,10 @@ Roles._handlebarsHelpers = {
         return memo
       }, [])
     } else {
-      roles = [role]
+      splitStr = [str]
     }
-
-    return Roles.userIsInRole(user, roles)
-  }
+	return splitStr;
 }
-
 
 if ('undefined' !== typeof Handlebars) {
   _.each(Roles._handlebarsHelpers, function (func, name) {

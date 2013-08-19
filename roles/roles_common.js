@@ -39,8 +39,8 @@ Roles.createRole = function (role) {
   var id,
       match
 
-  if (!role
-      || 'string' !== typeof role
+  if (!role 
+      || 'string' !== typeof role 
       || role.trim().length === 0) {
     return
   }
@@ -61,15 +61,15 @@ Roles.createRole = function (role) {
   }
 }
 
-/**
- * Delete an existing role.  Will throw "Role in use" error if any users
+/** 
+ * Delete an existing role.  Will throw "Role in use" error if any users 
  * are currently assigned to the target role.
- *
+ * 
  * @method deleteRole
  * @param {String} role Name of role
  */
 Roles.deleteRole = function (role) {
-  if (! role) {
+  if (!role) {
     return
   }
 
@@ -79,11 +79,8 @@ Roles.deleteRole = function (role) {
     throw new Meteor.Error(403, 'Role in use')
   }
 
-  var thisRole = Meteor.roles.findOne({ name: role })
-  if (thisRole) {
-    Meteor.roles.remove({ _id: thisRole._id })
-  }
-};
+  Meteor.roles.remove({ name: role })
+}
 
 /**
  * Add users to roles. Will create roles as needed.
@@ -95,8 +92,9 @@ Roles.deleteRole = function (role) {
  * @method addUsersToRoles
  * @param {Array|String} users id(s) of users to add to roles
  * @param {Array|String} roles name(s) of roles to add users to
+ * @param {Array|String} scopes optional scope identifiers to apply roles to
  */
-Roles.addUsersToRoles = function (users, roles) {
+Roles.addUsersToRoles = function (users, roles, scopes) {
   if (!users) throw new Error ("Missing 'users' param")
   if (!roles) throw new Error ("Missing 'roles' param")
 
@@ -105,6 +103,7 @@ Roles.addUsersToRoles = function (users, roles) {
   // ensure arrays
   if (!_.isArray(users)) users = [users]
   if (!_.isArray(roles)) roles = [roles]
+  if (scopes && !_.isArray(scopes)) scopes = [scopes]
 
   // remove invalid roles
   roles = _.reduce(roles, function (memo, role) {
@@ -132,12 +131,22 @@ Roles.addUsersToRoles = function (users, roles) {
   })
 
   // update all users, adding to roles set
+  var chg = { $addToSet:{} }
+  if(!scopes || !scopes.length)
+	chg.$addToSet.roles = { $each: roles }
+  else {
+	// add our roles to the given scope
+	_.each(scopes, function(scope) {
+		chg.$addToSet['roleScopes.'+scope] = { $each: roles }
+	})
+  }
+  
   if (Meteor.isClient) {
     _.each(users, function (user) {
       // Iterate over each user to fulfill Meteor's 'one update per ID' policy
       Meteor.users.update(
         {       _id: user },
-        { $addToSet: { roles: { $each: roles } } },
+        chg,
         {     multi: true }
       )
     })
@@ -145,7 +154,7 @@ Roles.addUsersToRoles = function (users, roles) {
     // On the server we can leverage MongoDB's $in operator for performance
     Meteor.users.update(
       {       _id: { $in: users } },
-      { $addToSet: { roles: { $each: roles } } },
+      chg,
       {     multi: true }
     )
   }
@@ -157,22 +166,34 @@ Roles.addUsersToRoles = function (users, roles) {
  * @method removeUsersFromRoles
  * @param {Array|String} users id(s) of users to add to roles
  * @param {Array|String} roles name(s) of roles to add users to
+ * @param {Array|String} scopes scopes from which to remove roles
  */
-Roles.removeUsersFromRoles = function (users, roles) {
+Roles.removeUsersFromRoles = function (users, roles, scopes) {
   if (!users) throw new Error ("Missing 'users' param")
   if (!roles) throw new Error ("Missing 'roles' param")
 
   // ensure arrays
   if (!_.isArray(users)) users = [users]
   if (!_.isArray(roles)) roles = [roles]
+  if (scopes && !_.isArray(scopes)) scopes = [scopes]
 
   // update all users, remove from roles set
+  var chg = { $pullAll:{} }
+  if(!scopes || !scopes.length)
+	chg.$pullAll.roles = roles
+  else {
+	// add the roles we're looking to pull to each scope
+	_.each(scopes, function(scope) {
+		chg.$pullAll['roleScopes.'+scope] = roles
+	})
+  }
+  
   if (Meteor.isClient) {
     // Iterate over each user to fulfill Meteor's 'one update per ID' policy
     _.each(users, function (user) {
       Meteor.users.update(
         {      _id: user },
-        { $pullAll: { roles: roles } },
+        chg,
         {    multi: true}
       )
     })
@@ -180,7 +201,7 @@ Roles.removeUsersFromRoles = function (users, roles) {
     // On the server we can leverage MongoDB's $in operator for performance
     Meteor.users.update(
       {      _id: {   $in: users } },
-      { $pullAll: { roles: roles } },
+      chg,
       {    multi: true}
     )
   }
@@ -191,21 +212,26 @@ Roles.removeUsersFromRoles = function (users, roles) {
  *
  * @method userIsInRole
  * @param {String|Object} user Id of user or actual user object
- * @param {String|Array} roles Name of role or Array of roles to check against.  If array, will return true if user is in _any_ role.
+ * @param {String|Array} roles Name of role or Array of roles to check against. If array, will return true if user is in _any_ role.
+ * @param {String|Array} scopes Scope identifier or Array of scopes to check within. If array, will return true if user is in _any_ role in _any_ scope.
  * @return {Boolean} true if user is in _any_ of the target roles
  */
-Roles.userIsInRole = function (user, roles) {
+Roles.userIsInRole = function (user, roles, scopes) {
   var id,
       userRoles
-
+    
   // ensure array to simplify code
   if (!_.isArray(roles)) {
     roles = [roles]
   }
-
+  
+  if(scopes && !_.isArray(scopes)) {
+	scopes = [scopes]
+  }
+  
   if (!user) {
     return false
-  } else if ('object' === typeof user) {
+  } else if ('object' === typeof user && (!scopes || !scopes.length)) {
     userRoles = user.roles
     if (_.isArray(userRoles)) {
       return _.some(roles, function (role) {
@@ -214,14 +240,31 @@ Roles.userIsInRole = function (user, roles) {
     }
     // missing roles field, try going direct via id
     id = user._id
+  } else if ('object' === typeof  user && scopes) {
+	if(_.isObject(user.roleScopes)) {
+		return _.some(scopes, function(scope) {
+			userRoles = user.roleScopes[scope];
+			return _.intersection(userRoles||[], roles).length>0
+		})
+	}
+	// missing roleScopes field, try by id
+	id = user._id
   } else if ('string' === typeof user) {
     id = user
-  }
+  } 
 
   if (!id) return false
+  var roleSearch = {_id:id}
+  if(!scopes || !scopes.length)
+	roleSearch.roles = { $in: roles }
+  else {
+	_.each(scopes, function(scope) {
+		roleSearch['roleScopes.'+scope] = { $in: roles }
+	});
+  }
 
   return Meteor.users.findOne(
-    { _id: id, roles: { $in: roles } },
+    roleSearch,
     { _id: 1 }
   )
 }
@@ -238,7 +281,7 @@ Roles.getRolesForUser = function (user) {
     { _id: user},
     { _id: 0, roles: 1}
   )
-
+  
   return user ? user.roles : undefined
 }
 
