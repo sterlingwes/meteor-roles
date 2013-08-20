@@ -258,8 +258,11 @@ Roles.userIsInRole = function (user, roles, scopes) {
   if(!scopes || !scopes.length)
 	roleSearch.roles = { $in: roles }
   else {
+	roleSearch.$or = [];
 	_.each(scopes, function(scope) {
-		roleSearch['roleScopes.'+scope] = { $in: roles }
+		var srch = {}
+		srch['roleScopes.'+scope] = { $in: roles }
+		roleSearch.$or.push(srch)
 	});
   }
 
