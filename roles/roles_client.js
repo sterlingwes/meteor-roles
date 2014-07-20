@@ -11,17 +11,17 @@
  */
 
 ////////////////////////////////////////////////////////////
-// Handlebars helpers
+// UI helpers
 //
-// Use a semi-private variable rather than declaring Handlebars
+// Use a semi-private variable rather than declaring UI
 // helpers directly so that we can unit test the helpers.
-// XXX For some reason, the Handlebars helpers are not registered 
+// XXX For some reason, the UI helpers are not registered 
 // before the tests run.
 //
 Roles._handlebarsHelpers = {
 
   /**
-   * Handlebars helper to check if current user is in at least one
+   * UI helper to check if current user is in at least one
    * of the target roles.  For use in client-side templates.
    *
    * @method isInRole
@@ -63,12 +63,12 @@ var commaSplit = function(str) {
 	return splitStr;
 }
 
-if ('undefined' !== typeof Handlebars) {
+if ('undefined' !== typeof UI) {
   _.each(Roles._handlebarsHelpers, function (func, name) {
-    Handlebars.registerHelper(name, func)
+    UI.registerHelper(name, func)
   })
 } else {
-  console.log('WARNING: Roles Handlebars helpers not registered. Handlebars not defined')
+  console.log('WARNING: Roles UI helpers not registered. UI not defined')
 }
 
 }());
